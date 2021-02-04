@@ -1,0 +1,242 @@
+#!/bin/bash
+
+keychain_exists () {
+    if [ -e ~/.pass_store.csv.gpg ]
+    then
+        echo 1
+    else
+        echo 0
+    fi
+}
+
+keychain_decrypt () {
+   
+
+    exists="$(keychain_exists)"
+
+    if [ "$exists" = "0" ]
+    then
+        return 0
+    fi
+
+    passwords_stored="$(gpg --pinentry-mode=loopback --passphrase "$1" -d ~/.pass_store.csv.gpg)"
+
+    if [ $? -eq 0 ]
+    then
+        echo "${passwords_stored}"
+    else
+        echo "0"
+    fi
+}
+
+
+init_store () {
+    if [ "$(keychain_exists)" = "0" ]
+    then
+
+        touch ~/.pass_store.csv
+        echo "CATEGORY, USER, PASSWORD" >> ~/.pass_store.csv
+
+        echo "Type your Password:"
+        read -s password
+
+        echo "Confirm you Password:"
+        read -s password_conf
+
+        if [ ! "${password}" == "${password_conf}" ]
+        then
+            >&2 echo -e "\n----> The password aren't equals"
+            exit 1
+        fi
+
+        gpg --pinentry-mode=loopback --passphrase "$password" -c ~/.pass_store.csv
+        rm -r ~/.pass_store.csv
+
+
+        if [ "$(keychain_exists)" = "0" ]
+        then
+            >&2 echo -e "\n----> Could not be create keychain storage"
+        else
+            >&2 echo -e "\n----> Keychain storage created"
+        fi
+
+    else
+        echo -e "\n----> The Keychain storage was made created in '~/.pass_store.csv.gpg'"
+    fi
+}
+
+add_credential () {
+
+    passwords_stored="_"
+    passwords_stored="$(keychain_decrypt $1)"
+
+    if [ "$(keychain_exists)" = 0 ]
+    then
+        >&2 echo -e "\n----> Keychain doesn't exists"
+        usage
+        exit 0
+    fi
+
+    if [ "0" = "${passwords_stored}" ];
+    then
+        >&2 echo -e "\n----> Could not access to keychain storage"
+        exit 1
+    fi
+
+    rm -r ~/.pass_store.csv.gpg
+    passwords_stored="$( echo -e "${passwords_stored}\nCATEGORY: $2, USER: $3, PASSWORD: $4" )"
+    echo "${passwords_stored}" | gpg --pinentry-mode=loopback --passphrase "$1" -co ~/.pass_store.csv.gpg
+    echo -e "\n----> Credential added"
+}
+
+delete_credential () {
+    
+    if [ "$( keychain_exists )" = "0" ]
+    then
+        >&2 echo -e "\n----> Keychain doesn't exists"
+        exit 1
+    fi
+
+    passwords_stored="$(keychain_decrypt $1)"
+
+    if [ "${passwords_stored}" != "0" ]
+    then
+        rm -r ~/.pass_store.csv.gpg
+        echo "${passwords_stored}" | sed $2d | gpg --pinentry-mode=loopback --passphrase "$1" -co ~/.pass_store.csv.gpg
+        echo -e "\n---->The line $2 has been deleted."
+
+    else
+        >&2 echo -e "\n----> The password isn't correct"
+        exit 1
+    fi
+
+}
+
+list_all () {
+
+    if [ "$(keychain_exists)" = 0 ]
+    then
+        >&2 echo -e "\n----> Keychain doesn't exists"
+        usage
+        exit 0
+    fi
+
+    passwords_stored="$(keychain_decrypt $1)"
+    if [ "0" != "${passwords_stored}" ]
+    then
+        echo -e "\n"
+        echo -e "${passwords_stored}" | column -s , -t
+    else
+        >&2 echo -e "\n----> Could access to keychain storage"
+    fi
+}
+
+search_credential () {
+    
+    if [ $(keychain_exists) = "1" ]
+    then
+        passwords_stored="$( keychain_decrypt $1)"
+        if [ "${passwords_stored}" != "0" ]
+        then
+            echo -e "\n"
+            echo "${passwords_stored}" | grep -in --color=always "$2" | column -s , -t 
+        else
+            >&2 echo -e "\n ----> The password isn't correct"
+        fi
+    else
+        >&2 echo "\n----> Keychain doesn't exists"
+        usage
+        exit
+    fi
+    
+}
+
+
+remove_keychain () {
+
+    passwords_stored="$(keychain_decrypt $1)"
+
+    if [ "$( keychain_exists )" = "0" ]
+    then
+        >&2 echo "\n----> The keychain storage doesn't exists"
+        exit 1
+    fi
+
+    if [ "${passwords_stored}" = "0" ]
+    then
+        >&2 echo -e "\n----> The password isn't correct"
+        exit 1
+    else
+
+        echo "Are you sure to delete keychain? y:yes n:not"
+        read answer
+
+        if [ "$answer" = "y" ] || [ "$answer" = "yes" ];
+        then
+            rm -v ~/.pass_store.csv.gpg
+        fi
+
+    fi
+}
+
+usage () {
+    usage_command=" 
+    The 'passdog' command is a simple keychain cli utility
+    USAGE: passdog option [param]\n
+    OPTIONS
+    -i  \"password\" 
+        for initialize the keychain
+    -pc \"category user pass\" 
+        for add a credential to keychain
+    -pl 
+        for list all credentials
+    -ps \"search_term\" 
+        for search a credential
+    -pr for delete keychain
+    -pd credential_number 
+        for delete credential to get credential_number you 
+        could use first the -ps option to get the credential_number
+
+    This tool require the packages gpg, column, sed, grep
+    "
+    echo -e "${usage_command}"
+}
+
+while getopts "pic:d:lrs:" o;
+   do
+   case "${o}" in 
+       p)
+           echo "Password:"
+           read -s password
+           ;;
+       i)
+           init_store
+           ;;
+       c) 
+           options=${OPTARG}
+           echo "${options}"
+           add_credential $password $options
+           ;;
+       d)
+           line=${OPTARG}
+           delete_credential $password $line
+           ;;
+       l) 
+           list_all $password 
+           ;;
+       r)
+           remove_keychain $password
+           ;;
+       s)
+           search=${OPTARG}
+           search_credential $password "$search"
+           ;;
+
+
+       *) 
+           usage
+           exit 0
+           ;;
+
+   esac
+done 
