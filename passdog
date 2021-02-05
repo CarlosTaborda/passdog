@@ -29,13 +29,21 @@ keychain_decrypt () {
     fi
 }
 
+generate_password () {
+
+    password="$(date | md5sum)"
+    password=`echo ${password:0:$1}`
+    echo "$password"
+
+}
+
 
 init_store () {
     if [ "$(keychain_exists)" = "0" ]
     then
 
         touch ~/.pass_store.csv
-        echo "CATEGORY, USER, PASSWORD" >> ~/.pass_store.csv
+        echo "CATEGORY, USER, PASSWORD, COMMENT" >> ~/.pass_store.csv
 
         echo "Type your Password:"
         read -s password
@@ -49,7 +57,7 @@ init_store () {
             exit 1
         fi
 
-        gpg --pinentry-mode=loopback --passphrase "$password" -c ~/.pass_store.csv
+        gpg --pinentry-mode=loopback --passphrase "$password" -c --no-symkey-cache ~/.pass_store.csv
         rm -r ~/.pass_store.csv
 
 
@@ -84,8 +92,15 @@ add_credential () {
     fi
 
     rm -r ~/.pass_store.csv.gpg
-    passwords_stored="$( echo -e "${passwords_stored}\nCATEGORY: $2, USER: $3, PASSWORD: $4" )"
-    echo "${passwords_stored}" | gpg --pinentry-mode=loopback --passphrase "$1" -co ~/.pass_store.csv.gpg
+
+    if [ -z "$5" ]
+    then
+       passwords_stored="$( echo -e "${passwords_stored}\nCATEGORY: $2, USER: $3, PASSWORD: $4, COMMENT:" )"
+    else
+	
+       passwords_stored="$( echo -e "${passwords_stored}\nCATEGORY: $2, USER: $3, PASSWORD: $4, $5" )"
+    fi
+    echo "${passwords_stored}" | gpg --pinentry-mode=loopback --passphrase "$1" -c --no-symkey-cache -o ~/.pass_store.csv.gpg
     echo -e "\n----> Credential added"
 }
 
@@ -102,7 +117,7 @@ delete_credential () {
     if [ "${passwords_stored}" != "0" ]
     then
         rm -r ~/.pass_store.csv.gpg
-        echo "${passwords_stored}" | sed $2d | gpg --pinentry-mode=loopback --passphrase "$1" -co ~/.pass_store.csv.gpg
+        echo "${passwords_stored}" | sed $2d | gpg --pinentry-mode=loopback --passphrase "$1" -c --no-symkey-cache -o ~/.pass_store.csv.gpg
         echo -e "\n---->The line $2 has been deleted."
 
     else
@@ -158,7 +173,7 @@ remove_keychain () {
 
     if [ "$( keychain_exists )" = "0" ]
     then
-        >&2 echo "\n----> The keychain storage doesn't exists"
+        >&2 echo -e "\n----> The keychain storage doesn't exists"
         exit 1
     fi
 
@@ -188,6 +203,8 @@ usage () {
         for initialize the keychain
     -pc \"category user pass\" 
         for add a credential to keychain
+    -g lenght
+        gerate a random password with the lenght spicified
     -pl 
         for list all credentials
     -ps \"search_term\" 
@@ -202,7 +219,7 @@ usage () {
     echo -e "${usage_command}"
 }
 
-while getopts "pic:d:lrs:" o;
+while getopts "pic:d:g:lrs:" o;
    do
    case "${o}" in 
        p)
@@ -221,6 +238,10 @@ while getopts "pic:d:lrs:" o;
            line=${OPTARG}
            delete_credential $password $line
            ;;
+       g) 
+           len=${OPTARG}
+   	   generate_password $len
+	   ;;
        l) 
            list_all $password 
            ;;
