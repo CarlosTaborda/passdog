@@ -2,6 +2,8 @@
 Is a very simple command line tool to manage passwords for Linux or WSL, passdog protect
 your passwords in a keychain encrypted  by AES256, you can add, edit, search and list your passwords.
 Passdog create a file that contains all your passwords, you set  one password to protect the keychain.
+
+![](https://raw.githubusercontent.com/CarlosTaborda/passdog/main/passdog.gif)
 # Install
 - Download passdog from this repo
 - Copy the passdog file to bin folder 
@@ -49,3 +51,5 @@ passdog -h
 and get info about more functions like: remove storage, remove credentials, generate ramdom password...
 
 if you want migrate your keychain only copy the **~/.pass_storage.csv.gpg** to new machine in the ~/ directory
+
+![](https://raw.githubusercontent.com/CarlosTaborda/passdog/main/passdog_help.PNG)
