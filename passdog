@@ -95,14 +95,41 @@ add_credential () {
 
     if [ -z "$5" ]
     then
-       passwords_stored="$( echo -e "${passwords_stored}\nCATEGORY: $2, USER: $3, PASSWORD: $4, COMMENT:" )"
+       passwords_stored="$( echo -e "${passwords_stored}\nCATEGORY: $2, $3, $4, COMMENT:" )"
     else
 	
-       passwords_stored="$( echo -e "${passwords_stored}\nCATEGORY: $2, USER: $3, PASSWORD: $4, $5" )"
+       passwords_stored="$( echo -e "${passwords_stored}\nCATEGORY: $2, $3, $4, $5" )"
     fi
     echo "${passwords_stored}" | gpg --pinentry-mode=loopback --passphrase "$1" -c --no-symkey-cache -o ~/.pass_store.csv.gpg
     echo -e "\n----> Credential added"
 }
+
+
+edit_passwords () {
+
+    if [ "$(keychain_exists)" = "0" ]
+    then
+        >&2 echo -e "\n----> Keychain storage doesn't exists"
+        exit 1
+    fi
+
+    passwords_stored="$(keychain_decrypt $1)"
+
+    if [ "${passwords_stored}" != "0" ]
+    then
+        file="/tmp/$(generate_password 10).csv"
+        echo "${passwords_stored}"> $file
+        vim -u NONE $file
+        passwords_stored="$(cat $file)"
+        rm $file ~/.pass_store.csv.gpg 
+        echo "${passwords_stored}" | gpg --pinentry-mode=loopback --passphrase "$1" -c --no-symkey-cache -o ~/.pass_store.csv.gpg
+        echo -e "\n----> Keychain storage edited successfull"
+        
+    else
+        >&2 echo -e "\n----> Could not access to keychain"
+        exit 1
+    fi
+} 
 
 delete_credential () {
     
@@ -203,6 +230,7 @@ usage () {
         for initialize the keychain
     -pc \"category user pass\" 
         for add a credential to keychain
+
     -g lenght
         gerate a random password with the lenght spicified
     -pl 
@@ -213,13 +241,15 @@ usage () {
     -pd credential_number 
         for delete credential to get credential_number you 
         could use first the -ps option to get the credential_number
+    -pe 
+        Edit all passwords with VIM editor 
 
-    This tool require the packages gpg, column, sed, grep
+    This tool require the packages vim, gpg, column, sed, grep
     "
     echo -e "${usage_command}"
 }
 
-while getopts "pic:d:g:lrs:" o;
+while getopts "pic:d:eg:lrs:" o;
    do
    case "${o}" in 
        p)
@@ -238,9 +268,12 @@ while getopts "pic:d:g:lrs:" o;
            line=${OPTARG}
            delete_credential $password $line
            ;;
+       e) 
+           edit_passwords $password
+           ;;
        g) 
            len=${OPTARG}
-   	   generate_password $len
+      	   generate_password $len
 	   ;;
        l) 
            list_all $password 
@@ -253,8 +286,7 @@ while getopts "pic:d:g:lrs:" o;
            search_credential $password "$search"
            ;;
 
-
-       *) 
+       \?) 
            usage
            exit 0
            ;;
