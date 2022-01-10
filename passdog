@@ -29,6 +29,18 @@ keychain_decrypt () {
     fi
 }
 
+export_keychain(){
+    cp ~/.pass_store.csv.gpg "$1/pass_store.csv.gpg$(date '+%Y%m%d_%I%M%P')"
+    echo "keychain exported to: $1/pass_store.csv.gpg$(date '+%Y%m%d_%I%M%P')"
+}
+
+import_keychain(){
+    files=(ls $1/pass_store.csv.gpg*)
+    cp -i "${files[-1]}" ~/.pass_store.csv.gpg
+    echo "---------->${files[-1]} imported successfull"
+}    
+
+
 generate_password () {
 
     password="$(date | md5sum)"
@@ -243,13 +255,18 @@ usage () {
         could use first the -ps option to get the credential_number
     -pe 
         Edit all passwords with VIM editor 
+    -x  
+        Export the keychan file to path indicated ex: passdog -x [path]
+    -z  
+        Import the keychan file to path indicated ex: passdog -z [path] (path not contain file name)
+
 
     This tool require the packages vim, gpg, column, sed, grep
     "
     echo -e "${usage_command}"
 }
 
-while getopts "pic:d:eg:lrs:" o;
+while getopts "pic:d:eg:lrs:x:z:" o;
    do
    case "${o}" in 
        p)
@@ -284,6 +301,14 @@ while getopts "pic:d:eg:lrs:" o;
        s)
            search=${OPTARG}
            search_credential $password "$search"
+           ;;
+       x) 
+           export_path=${OPTARG}
+           export_keychain $export_path
+           ;;
+       z) 
+           import_path=${OPTARG}
+           import_keychain $import_path
            ;;
 
        \?) 

@@ -48,8 +48,14 @@ For display usage
 ```bash
 passdog -h
 ```
+
+For edit the file that contain all credentials
+```bash
+passdog -pe
+```
 and get info about more functions like: remove storage, remove credentials, generate ramdom password...
 
 if you want migrate your keychain only copy the **~/.pass_storage.csv.gpg** to new machine in the ~/ directory
 
+## _Full list options_
 ![](https://raw.githubusercontent.com/CarlosTaborda/passdog/main/passdog_help.PNG)
