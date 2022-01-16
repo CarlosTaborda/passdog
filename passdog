@@ -38,6 +38,7 @@ import_keychain(){
     files=(ls $1/pass_store.csv.gpg*)
     cp -i "${files[-1]}" ~/.pass_store.csv.gpg
     echo "---------->${files[-1]} imported successfull"
+    rm -v "${files[-1]}"
 }    
 
 
@@ -266,6 +267,15 @@ usage () {
     echo -e "${usage_command}"
 }
 
+
+if [ $# -eq 0 ]
+  then
+    echo "No arguments supplied:"
+    echo "passdog -h to see options"
+fi
+
+
+
 while getopts "pic:d:eg:lrs:x:z:" o;
    do
    case "${o}" in 
@@ -311,10 +321,11 @@ while getopts "pic:d:eg:lrs:x:z:" o;
            import_keychain $import_path
            ;;
 
-       \?) 
+       \? |* ) 
            usage
            exit 0
            ;;
 
    esac
 done 
+
