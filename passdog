@@ -38,7 +38,7 @@ import_keychain(){
     files=(ls $1/pass_store.csv.gpg*)
     cp -i "${files[-1]}" ~/.pass_store.csv.gpg
     echo "---------->${files[-1]} imported successfull"
-    rm -v "${files[-1]}"
+    rm -v $1/pass_store.csv.gpg*
 }    
 
 
