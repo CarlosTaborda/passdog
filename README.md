@@ -3,20 +3,28 @@ Is a very simple command line tool to manage passwords for Linux or WSL, passdog
 your passwords in a keychain encrypted  by AES256, you can add, edit, search and list your passwords.
 Passdog create a file that contains all your passwords, you set  one password to protect the keychain.
 
+You can enable synchronizing with github creating a private repo and setting 
+```bash
+export PASSDOG_REPO="git@github.com:user/repo.git
+export PASSDOG_REPOKEYPATH="/home/user/.ssh/id_github
+```
+in you .bashrc file
+
+
 ![](https://raw.githubusercontent.com/CarlosTaborda/passdog/main/passdog.gif)
 # Install
 - Download passdog from this repo
 - Copy the passdog file to bin folder 
 - Go to use
 
-# Require
-vim, gpg, grep, column, sed
+# Requirements
+vim, gpg, grep, column, sed, zip, unzip, git
 
 
 # Basic Usage
 The keychain path is
 ```bash
-~/.pass_store.csv.gpg
+~/.passdog/passdogstore.csv
 ```
 
 For initialize the Keychain 
@@ -26,7 +34,7 @@ passdog -i
 
 For add a credential to  the Keychain 
 ```bash
-passdog -pc "category user password [comment]"
+passdog -pc
 ```
 
 For list all passwords
@@ -55,7 +63,7 @@ passdog -pe
 ```
 and get info about more functions like: remove storage, remove credentials, generate ramdom password...
 
-if you want migrate your keychain only copy the **~/.pass_storage.csv.gpg** to new machine in the ~/ directory
+if you want migrate your keychain only copy the **~/.passdog/passdogstore.csv** to new machine in the ~/ directory
 
 ## _Full list options_
 ![](https://raw.githubusercontent.com/CarlosTaborda/passdog/main/passdog_help.PNG)

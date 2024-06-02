@@ -1,7 +1,12 @@
 #!/bin/bash
 
+# Add vars to your .bashrc or .bash_profile to use the online syncronization
+
+#export PASSDOG_REPO="git@github.com:CarlosTaborda/credentials.git"
+#export PASSDOG_REPOKEYPATH="/home/ubuntu_felipe/.ssh/id_github"
+
 keychain_exists () {
-    if [ -e ~/.pass_store.csv.gpg ]
+    if [ -d ~/.passdog ]
     then
         echo 1
     else
@@ -19,7 +24,7 @@ keychain_decrypt () {
         return 0
     fi
 
-    passwords_stored="$(gpg --pinentry-mode=loopback --passphrase "$1" -d ~/.pass_store.csv.gpg)"
+    passwords_stored="$(gpg --pinentry-mode=loopback --passphrase "$1" -d ~/.passdog/passdogstore.csv)"
 
     if [ $? -eq 0 ]
     then
@@ -30,15 +35,22 @@ keychain_decrypt () {
 }
 
 export_keychain(){
-    cp ~/.pass_store.csv.gpg "$1/pass_store.csv.gpg$(date '+%Y%m%d_%I%M%P')"
-    echo "keychain exported to: $1/pass_store.csv.gpg$(date '+%Y%m%d_%I%M%P')"
+    cd ~
+    zip -r ~/passdog.zip .passdog
+    cd -
+    mv ~/passdog.zip "$1/passdog$(date '+%Y%m%d_%I%M%P').zip"
+    echo "keychain exported to: $1/passdog$(date '+%Y%m%d_%I%M%P').zip"
 }
 
 import_keychain(){
-    files=(ls $1/pass_store.csv.gpg*)
-    cp -i "${files[-1]}" ~/.pass_store.csv.gpg
+    files=(ls $1/passdog*)
+    cp -i "${files[-1]}" ~/.passdog.zip
+    unzip ~/.passdog.zip -d ~/tmpFolderPassdog
+    mv -i ~/tmpFolderPassdog/.passdog ~/.passdog
+    rm -r ~/tmpFolderPassdog
     echo "---------->${files[-1]} imported successfull"
-    rm -v $1/pass_store.csv.gpg*
+    rm -v $1/passdog*
+    rm -v ~/.passdog.zip
 }    
 
 
@@ -51,12 +63,57 @@ generate_password () {
 }
 
 
+sync_keychain () {
+    echo "-- synchronizing keychain --"
+
+    if [ -d ~/.passdog/ ] && [ -d ~/.passdog/.git ]
+    then
+        if [[ `git -C ~/.passdog status --porcelain` ]]
+        then
+            git -C ~/.passdog branch -M main
+            git -C ~/.passdog add .
+            git -C ~/.passdog commit -m "sync"
+            if [ -n "${PASSDOG_REPO}" ] && [ -n "${PASSDOG_REPOKEYPATH}" ]
+            then
+                eval $(ssh-agent -s)
+                ssh-add ${PASSDOG_REPOKEYPATH}
+                git -C ~/.passdog remote set-url origin ${PASSDOG_REPO}
+                git -C ~/.passdog push -f origin main
+            fi
+        else
+            if [ -n "${PASSDOG_REPO}" ] && [ -n "${PASSDOG_REPOKEYPATH}" ]
+            then
+                eval $(ssh-agent -s)
+                ssh-add ${PASSDOG_REPOKEYPATH}
+                git -C ~/.passdog pull
+            fi
+        fi
+    else
+        
+        if [ -n "${PASSDOG_REPO}" ] && [ -n "${PASSDOG_REPOKEYPATH}" ]
+        then
+            eval $(ssh-agent -s)
+            ssh-add ${PASSDOG_REPOKEYPATH}
+            git clone ${PASSDOG_REPO}  ~/.passdog
+        else
+            mkdir ~/.passdog
+            touch ~/.passdog/passdogstore.csv
+            echo "CATEGORY, USER, PASSWORD, COMMENT" >> ~/.passdog/passdogstore.csv
+            git -C ~/.passdog init
+            git -C ~/.passdog add .
+            git -C ~/.passdog commit -m "initial commit"
+            git -C ~/.passdog branch -M main
+        fi
+
+    fi
+}
+
+
 init_store () {
     if [ "$(keychain_exists)" = "0" ]
     then
-
-        touch ~/.pass_store.csv
-        echo "CATEGORY, USER, PASSWORD, COMMENT" >> ~/.pass_store.csv
+        
+        
 
         echo "Type your Password:"
         read -s password
@@ -70,10 +127,19 @@ init_store () {
             exit 1
         fi
 
-        gpg --pinentry-mode=loopback --passphrase "$password" -c --no-symkey-cache ~/.pass_store.csv
-        rm -r ~/.pass_store.csv
+        sync_keychain
 
+        passwords_stored="$(keychain_decrypt $password)"
+        if [ "0" = "${passwords_stored}" ];
+        then
+            gpg --pinentry-mode=loopback --passphrase "$password" -c --no-symkey-cache ~/.passdog/passdogstore.csv
+            rm -r ~/.passdog/passdogstore.csv
+            mv ~/.passdog/passdogstore.csv.gpg ~/.passdog/passdogstore.csv
+        fi
 
+        
+
+        
         if [ "$(keychain_exists)" = "0" ]
         then
             >&2 echo -e "\n----> Could not be create keychain storage"
@@ -82,7 +148,7 @@ init_store () {
         fi
 
     else
-        echo -e "\n----> The Keychain storage was made created in '~/.pass_store.csv.gpg'"
+        echo -e "\n----> The Keychain storage already exists '~/.passdog/passdogstore.csv'"
     fi
 }
 
@@ -104,21 +170,34 @@ add_credential () {
         exit 1
     fi
 
-    rm -r ~/.pass_store.csv.gpg
+    rm -r ~/.passdog/passdogstore.csv
+    echo ""
+    echo ""
+    echo "-- ADD CREDENTIAL --"
+    echo ""
 
-    if [ -z "$5" ]
-    then
-       passwords_stored="$( echo -e "${passwords_stored}\nCATEGORY: $2, $3, $4, COMMENT:" )"
-    else
-	
-       passwords_stored="$( echo -e "${passwords_stored}\nCATEGORY: $2, $3, $4, $5" )"
-    fi
-    echo "${passwords_stored}" | gpg --pinentry-mode=loopback --passphrase "$1" -c --no-symkey-cache -o ~/.pass_store.csv.gpg
+    category=""
+    user=""
+    password=""
+    comment=""
+
+    read -p "CATEGORY:" category
+    read -p "USER:" user
+    read -p "PASSWORD:" password
+    read -p "COMMENT:" comment
+
+
+    passwords_stored="$( echo -e "${passwords_stored}\nCATEGORY: $category, $user, $password, $comment" )"
+    echo "${passwords_stored}" | gpg --pinentry-mode=loopback --passphrase "$1" -c --no-symkey-cache -o ~/.passdog/passdogstore.csv
+
+    sync_keychain
+    
     echo -e "\n----> Credential added"
 }
 
 
 edit_passwords () {
+
 
     if [ "$(keychain_exists)" = "0" ]
     then
@@ -132,10 +211,50 @@ edit_passwords () {
     then
         file="/tmp/$(generate_password 10).csv"
         echo "${passwords_stored}"> $file
-        vim -u NONE $file
+        if [ -n "$2" ]
+        then
+            credential=$(sed $2!d $file)
+            IFS=','
+            echo -e "\n\n"
+            read -a strarr <<<"$credential"
+            read -p "CATEGORY [${strarr[0]}]: " category
+            read -p "USER [${strarr[1]}]: " user
+            read -p "PASSWORD [${strarr[2]}]: " password
+            read -p "COMMENT [${strarr[3]}]: " comment
+            echo -e "\n"
+            if [ -z "${category}" ]
+            then
+                category="${strarr[0]}"
+            fi
+            if ! [[ $string == *"CATEGORY:"* ]]; then
+                category="CATEGORY: $category"
+            fi
+            if [ -z "${user}" ]
+            then
+                user="${strarr[1]}"
+            fi
+            if [ -z "${password}" ]
+            then
+                password="${strarr[2]}"
+            fi
+            if [ -z "${comment}" ]
+            then
+                comment="${strarr[3]}"
+            fi
+            modifiedcred="$category, $user, $password, $comment"
+            modifiedfile=$(sed "$2 c\
+            $modifiedcred" $file)
+            echo "${modifiedfile}" > $file 
+        else
+            
+            vim -u NONE $file
+            
+        fi
         passwords_stored="$(cat $file)"
-        rm $file ~/.pass_store.csv.gpg 
-        echo "${passwords_stored}" | gpg --pinentry-mode=loopback --passphrase "$1" -c --no-symkey-cache -o ~/.pass_store.csv.gpg
+        rm ~/.passdog/passdogstore.csv
+        echo "${passwords_stored}" | gpg --pinentry-mode=loopback --passphrase "$1" -c --no-symkey-cache -o ~/.passdog/passdogstore.csv
+        rm $file
+        sync_keychain
         echo -e "\n----> Keychain storage edited successfull"
         
     else
@@ -156,8 +275,9 @@ delete_credential () {
 
     if [ "${passwords_stored}" != "0" ]
     then
-        rm -r ~/.pass_store.csv.gpg
-        echo "${passwords_stored}" | sed $2d | gpg --pinentry-mode=loopback --passphrase "$1" -c --no-symkey-cache -o ~/.pass_store.csv.gpg
+        rm -r ~/.passdog/passdogstore.csv
+        echo "${passwords_stored}" | sed $2d | gpg --pinentry-mode=loopback --passphrase "$1" -c --no-symkey-cache -o ~/.passdog/passdogstore.csv
+        sync_keychain
         echo -e "\n---->The line $2 has been deleted."
 
     else
@@ -179,8 +299,9 @@ list_all () {
     passwords_stored="$(keychain_decrypt $1)"
     if [ "0" != "${passwords_stored}" ]
     then
+        sync_keychain
         echo -e "\n"
-        echo -e "${passwords_stored}" | column -s , -t
+        echo -e "${passwords_stored}" | nl -w2 -s'- ' | column -s , -t
     else
         >&2 echo -e "\n----> Could access to keychain storage"
     fi
@@ -193,6 +314,7 @@ search_credential () {
         passwords_stored="$( keychain_decrypt $1)"
         if [ "${passwords_stored}" != "0" ]
         then
+            sync_keychain
             echo -e "\n"
             echo "${passwords_stored}" | grep -in --color=always "$2" | column -s , -t 
         else
@@ -223,12 +345,15 @@ remove_keychain () {
         exit 1
     else
 
-        echo "Are you sure to delete keychain? y:yes n:not"
+        echo  -e  "\n\nAre you sure to delete keychain? y:yes n:not"
         read answer
 
         if [ "$answer" = "y" ] || [ "$answer" = "yes" ];
         then
-            rm -v ~/.pass_store.csv.gpg
+            rm -rv ~/.passdog/
+            echo -e "\n----> Keychain storage deleted"
+        else
+            echo -e "\n----> Keychain storage not deleted"
         fi
 
     fi
@@ -239,7 +364,7 @@ usage () {
     The 'passdog' command is a simple keychain cli utility
     USAGE: passdog option [param]\n
     OPTIONS
-    -i  \"password\" 
+    -i  
         for initialize the keychain
     -pc \"category user pass\" 
         for add a credential to keychain
@@ -254,8 +379,10 @@ usage () {
     -pd credential_number 
         for delete credential to get credential_number you 
         could use first the -ps option to get the credential_number
-    -pe 
+    -pE 
         Edit all passwords with VIM editor 
+    -pe [linenumber]
+        Edit a passwords in the spicified line
     -x  
         Export the keychan file to path indicated ex: passdog -x [path]
     -z  
@@ -276,7 +403,7 @@ fi
 
 
 
-while getopts "pic:d:eg:lrs:x:z:" o;
+while getopts "pEcide:g:lrs:x:z:" o;
    do
    case "${o}" in 
        p)
@@ -287,21 +414,23 @@ while getopts "pic:d:eg:lrs:x:z:" o;
            init_store
            ;;
        c) 
-           options=${OPTARG}
-           echo "${options}"
-           add_credential $password $options
+           add_credential $password 
            ;;
        d)
            line=${OPTARG}
            delete_credential $password $line
            ;;
        e) 
+           line=${OPTARG}
+           edit_passwords $password $line
+           ;;
+       E) 
            edit_passwords $password
            ;;
        g) 
            len=${OPTARG}
       	   generate_password $len
-	   ;;
+	        ;;
        l) 
            list_all $password 
            ;;
